@@ -367,6 +367,10 @@ trait Service extends Logging {
                         // retrieve fee stats
                         case "channelstats" => completeRpcFuture(req.id, Future(nodeParams.auditDb.stats))
 
+                        case "localbalances" =>
+                          val res = (register ? 'localBalances).mapTo[Iterable[ChannelBalance]]
+                          completeRpcFuture(req.id, res)
+
                         // method name was not found
                         case _ => reject(UnknownMethodRejection(req.id))
                       }
@@ -448,6 +452,7 @@ trait Service extends Logging {
     "audit (from, to): list send/received/relayed payments in that interval (from <= timestamp < to)",
     "networkfees: list all network fees paid to the miners, by transaction",
     "networkfees (from, to): list network fees paid to the miners, by transaction, in that interval (from <= timestamp < to)",
+    "localbalances: list how much can be sent or received through each local channel right now",
     "getinfo: returns info about the blockchain and this node",
     "help: display this message")
 

@@ -205,7 +205,7 @@ class Setup(datadir: File,
         case "local" => LocalPaymentHandler.props(nodeParams)
         case "noop" => Props[NoopPaymentHandler]
       }, "payment-handler", SupervisorStrategy.Resume))
-      register = system.actorOf(SimpleSupervisor.props(Props(new Register), "register", SupervisorStrategy.Resume))
+      register = system.actorOf(SimpleSupervisor.props(Props(new Register(nodeParams)), "register", SupervisorStrategy.Resume))
       relayer = system.actorOf(SimpleSupervisor.props(Relayer.props(nodeParams, register, paymentHandler), "relayer", SupervisorStrategy.Resume))
       router = system.actorOf(SimpleSupervisor.props(Router.props(nodeParams, watcher), "router", SupervisorStrategy.Resume))
       authenticator = system.actorOf(SimpleSupervisor.props(Authenticator.props(nodeParams), "authenticator", SupervisorStrategy.Resume))
