@@ -314,7 +314,10 @@ trait Service extends Logging {
                             case JString(identifier) :: Nil =>
                               extractPaymentHash(identifier) match {
                                 case Success(hash) =>
-                                  kit.nodeParams.auditDb.receivedPaymentInfo(hash) match {
+                                  // We may receive a payment and release a preimage but then a channel breaking may follow.
+                                  // Same payment may be reported as lost on chain in local commit and settling on chain in remote commit.
+                                  // This means we need to ask for on-chain settling payment first, then check if it has been lost on-chain, and only then check whether it has been received off-chain.
+                                  kit.nodeParams.onChainRefundsDb.getSettlingOnChain(hash) orElse kit.nodeParams.onChainRefundsDb.getLostOnChain(hash) orElse kit.nodeParams.auditDb.receivedPaymentInfo(hash) match {
                                     case Some(paymentReceived) => completeRpcFuture(req.id, Future.successful(paymentReceived))
                                     case None => completeRpcFuture(req.id, Future.failed(new IllegalArgumentException("no such payment received yet")))
                                   }
@@ -329,7 +332,9 @@ trait Service extends Logging {
                           case JString(identifier) :: Nil =>
                             extractPaymentHash(identifier) match {
                               case Success(hash) =>
-                                kit.nodeParams.auditDb.sentPaymentInfo(hash) match {
+                                // We may send a payment, a channel breaking may follow with `PaymentSettlingOnChain` or `PaymentLostOnChain` following, but then remote peer may fetch a payment on-chain by revealing a preimage
+                                // This means we need to ask if a payment has been received off-chain first, then check whether it is settling on-chain, and only then check if it has been lost on-chain.
+                                kit.nodeParams.auditDb.sentPaymentInfo(hash) orElse kit.nodeParams.onChainRefundsDb.getSettlingOnChain(hash) orElse kit.nodeParams.onChainRefundsDb.getLostOnChain(hash) orElse kit.nodeParams.auditDb.failedPaymentInfo(hash) match {
                                   case Some(paymentSent) => completeRpcFuture(req.id, Future.successful(paymentSent))
                                   case None => completeRpcFuture(req.id, Future.failed(new IllegalArgumentException("no such payment sent yet")))
                                 }

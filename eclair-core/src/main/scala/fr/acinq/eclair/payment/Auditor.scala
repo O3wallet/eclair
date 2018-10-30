@@ -19,10 +19,12 @@ package fr.acinq.eclair.payment
 import akka.actor.{Actor, ActorLogging, Props}
 import fr.acinq.eclair.NodeParams
 import fr.acinq.eclair.channel.NetworkFeePaid
+import fr.acinq.eclair.payment.PaymentLifecycle.PaymentFailed
 
 class Auditor(nodeParams: NodeParams) extends Actor with ActorLogging {
 
   context.system.eventStream.subscribe(self, classOf[PaymentEvent])
+  context.system.eventStream.subscribe(self, classOf[PaymentFailed])
   context.system.eventStream.subscribe(self, classOf[NetworkFeePaid])
 
   override def receive: Receive = {
@@ -34,6 +36,8 @@ class Auditor(nodeParams: NodeParams) extends Actor with ActorLogging {
     case e: PaymentRelayed => nodeParams.auditDb.add(e)
 
     case e: NetworkFeePaid => nodeParams.auditDb.add(e)
+
+    case e: PaymentFailed => nodeParams.auditDb.add(e)
 
     case e: PaymentSettlingOnChain => nodeParams.onChainRefundsDb.addSettlingOnChain(e)
 

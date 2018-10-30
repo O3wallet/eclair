@@ -21,6 +21,7 @@ import java.sql.DriverManager
 import fr.acinq.bitcoin.{MilliSatoshi, Satoshi, Transaction}
 import fr.acinq.eclair.channel.NetworkFeePaid
 import fr.acinq.eclair.db.sqlite.SqliteAuditDb
+import fr.acinq.eclair.payment.PaymentLifecycle.PaymentFailed
 import fr.acinq.eclair.payment.{PaymentReceived, PaymentRelayed, PaymentSent}
 import fr.acinq.eclair.{randomBytes, randomKey}
 import org.scalatest.FunSuite
@@ -109,5 +110,14 @@ class SqliteAuditDbSpec extends FunSuite {
     val e1 = PaymentSent(MilliSatoshi(42000), MilliSatoshi(1000), randomBytes(32), randomBytes(32), randomBytes(32))
     db.add(e1)
     assert(db.sentPaymentInfo(e1.paymentHash).contains(e1))
+  }
+
+  test("failed payment details") {
+    val sqlite = inmem
+    val db = new SqliteAuditDb(sqlite)
+
+    val e1 = PaymentFailed(randomBytes(32), Nil)
+    db.add(e1)
+    assert(db.failedPaymentInfo(e1.paymentHash).contains(e1))
   }
 }
