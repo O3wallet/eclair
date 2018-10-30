@@ -301,7 +301,7 @@ trait Service extends Logging {
                           case _ => reject(UnknownParamsRejection(req.id, "[paymentHash] or [paymentRequest]"))
                         }
 
-                        case "receivedpaymentinfo" =>
+                        case "receivedinfo" =>
                           req.params match {
                             case JString(identifier) :: Nil =>
                               extractPaymentHash(identifier) match {
@@ -313,7 +313,23 @@ trait Service extends Logging {
                                 case _ =>
                                   completeRpcFuture(req.id, Future.failed(new IllegalArgumentException("payment identifier must be a payment request or a payment hash")))
                               }
-                            case _ => reject(UnknownParamsRejection(req.id, "[paymentHash] or [paymentRequest]"))
+                            case _ =>
+                              reject(UnknownParamsRejection(req.id, "[paymentHash] or [paymentRequest]"))
+                          }
+
+                        case "sentinfo" => req.params match {
+                          case JString(identifier) :: Nil =>
+                            extractPaymentHash(identifier) match {
+                              case Success(hash) =>
+                                kit.nodeParams.auditDb.sentPaymentInfo(hash) match {
+                                  case Some(paymentSent) => completeRpcFuture(req.id, Future.successful(paymentSent))
+                                  case None => completeRpcFuture(req.id, Future.failed(new IllegalArgumentException("no such payment sent yet")))
+                                }
+                              case _ =>
+                                completeRpcFuture(req.id, Future.failed(new IllegalArgumentException("payment identifier must be a payment request or a payment hash")))
+                            }
+                            case _ =>
+                              reject(UnknownParamsRejection(req.id, "[paymentHash] or [paymentRequest]"))
                           }
 
                         // retrieve audit events
@@ -404,6 +420,10 @@ trait Service extends Logging {
     "send (amountMsat, paymentHash, nodeId): send a payment to a lightning node",
     "send (paymentRequest): send a payment to a lightning node using a BOLT11 payment request",
     "send (paymentRequest, amountMsat): send a payment to a lightning node using a BOLT11 payment request and a custom amount",
+    "receivedinfo (paymentHash): returns extended info about received payment",
+    "receivedinfo (paymentRequest): returns extended info about received payment",
+    "sentinfo (paymentHash): returns extended info about sent payment",
+    "sentinfo (paymentRequest): returns extended info about sent payment",
     "close (channelId): close a channel",
     "close (channelId, scriptPubKey): close a channel and send the funds to the given scriptPubKey",
     "forceclose (channelId): force-close a channel by publishing the local commitment tx (careful: this is more expensive than a regular close and will incur a delay before funds are spendable)",
