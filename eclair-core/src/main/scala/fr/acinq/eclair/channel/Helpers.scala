@@ -467,7 +467,7 @@ object Helpers {
 
       // those are the preimages to existing received htlcs
       val preimages = commitments.localChanges.all.collect { case u: UpdateFulfillHtlc => sha256(u.paymentPreimage) -> u.paymentPreimage }.toMap
-      val inFlightHtlcs = commitments.localCommit.spec.htlcs.map(htlc => htlc.add.paymentHash -> htlc.add.amountMsat).toMap
+      val inFlightHtlcs = remoteCommit.spec.htlcs.map(htlc => htlc.add.paymentHash -> htlc.add.amountMsat).toMap
 
       // remember we are looking at the remote commitment so IN for them is really OUT for us and vice versa
       var outputsAlreadyUsed = Set.empty[Int] // this is needed to handle cases where we have several identical htlcs
