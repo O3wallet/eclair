@@ -398,11 +398,13 @@ trait Service extends Logging {
     system.actorOf(Props(new Actor {
 
       override def preStart: Unit = {
+        context.system.eventStream.subscribe(self, classOf[ChannelBalances])
         context.system.eventStream.subscribe(self, classOf[PaymentFailed])
         context.system.eventStream.subscribe(self, classOf[PaymentEvent])
       }
 
       def receive: Receive = {
+        case message: ChannelBalances => flowInput.offer(Serialization write message)
         case message: PaymentFailed => flowInput.offer(Serialization write message)
         case message: PaymentEvent => flowInput.offer(Serialization write message)
         case other => logger.info(s"Unexpected ws message: $other")

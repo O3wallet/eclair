@@ -63,14 +63,17 @@ class Register(nodeParams: NodeParams) extends Actor with ActorLogging {
 
     case ChannelSignatureSent(_, commitments, Some(channelUpdate)) =>
       val localBalances1 = localBalances + (commitments.channelId -> getBalances(commitments, channelUpdate))
+      context.system.eventStream publish ChannelBalances(localBalances1.values.toSet)
       context become main(channels, shortIds, channelsTo, localBalances1)
 
     case ChannelStateChanged(_, _, _, previousState, NORMAL, d: DATA_NORMAL) if previousState != NORMAL =>
       val localBalances1 = localBalances + (d.commitments.channelId -> getBalances(d.commitments, d.channelUpdate))
+      context.system.eventStream publish ChannelBalances(localBalances1.values.toSet)
       context become main(channels, shortIds, channelsTo, localBalances1)
 
     case ChannelStateChanged(_, _, _, NORMAL, currentState, hasCommitments: HasCommitments) if currentState != NORMAL =>
       val localBalances1 = localBalances - hasCommitments.channelId
+      context.system.eventStream publish ChannelBalances(localBalances1.values.toSet)
       context become main(channels, shortIds, channelsTo, localBalances1)
 
     case 'channels => sender ! channels
@@ -98,9 +101,7 @@ class Register(nodeParams: NodeParams) extends Actor with ActorLogging {
     val latestRemoteCommit = cs.remoteNextCommitInfo.left.toOption.map(_.nextRemoteCommit).getOrElse(cs.remoteCommit)
     val canReceiveWithReserve = cs.localCommit.spec.toRemoteMsat - cs.localParams.channelReserveSatoshis * 1000L
     val canSendWithReserve = latestRemoteCommit.spec.toRemoteMsat - cs.remoteParams.channelReserveSatoshis * 1000L
-
-    ChannelBalanceInfo(ChannelBalance(canSendWithReserve, canReceiveWithReserve), cs.remoteParams.nodeId,
-      cu.shortChannelId.toLong, cu.cltvExpiryDelta, cu.htlcMinimumMsat, cu.feeBaseMsat, cu.feeProportionalMillionths)
+    ChannelBalanceInfo(ChannelBalance(canSendWithReserve, canReceiveWithReserve), cs.remoteParams.nodeId, cs.channelId)
   }
 }
 
@@ -117,7 +118,6 @@ object Register {
 
 case class ChannelBalance(canSendMsat: Long, canReceiveMsat: Long)
 
-case class ChannelBalanceInfo(balance: ChannelBalance, peerNodeId: PublicKey, shortChannelId: Long,
-                              cltvExpiryDelta: Int, htlcMinimumMsat: Long, feeBaseMsat: Long, feeProportionalMillionths: Long)
+case class ChannelBalanceInfo(balance: ChannelBalance, peerNodeId: PublicKey, channelId: BinaryData)
 
-case class ChannelBalances(localBalances: Set[ChannelBalanceInfo])
+case class ChannelBalances(localBalances: Set[ChannelBalanceInfo], tag: String = "ChannelBalances")
