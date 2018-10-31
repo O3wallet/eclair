@@ -101,7 +101,10 @@ class Register(nodeParams: NodeParams) extends Actor with ActorLogging {
     val latestRemoteCommit = cs.remoteNextCommitInfo.left.toOption.map(_.nextRemoteCommit).getOrElse(cs.remoteCommit)
     val canReceiveWithReserve = cs.localCommit.spec.toRemoteMsat - cs.localParams.channelReserveSatoshis * 1000L
     val canSendWithReserve = latestRemoteCommit.spec.toRemoteMsat - cs.remoteParams.channelReserveSatoshis * 1000L
-    ChannelBalanceInfo(ChannelBalance(canSendWithReserve, canReceiveWithReserve), cs.remoteParams.nodeId, cs.channelId)
+
+    ChannelBalanceInfo(ChannelBalance(canSendWithReserve, canReceiveWithReserve), cs.remoteParams.nodeId,
+      cu.shortChannelId.toLong, cu.cltvExpiryDelta, cu.htlcMinimumMsat, cu.feeBaseMsat,
+      cu.feeProportionalMillionths)
   }
 }
 
@@ -118,6 +121,8 @@ object Register {
 
 case class ChannelBalance(canSendMsat: Long, canReceiveMsat: Long)
 
-case class ChannelBalanceInfo(balance: ChannelBalance, peerNodeId: PublicKey, channelId: BinaryData)
+case class ChannelBalanceInfo(balance: ChannelBalance, peerNodeId: PublicKey, shortChannelId: Long,
+                              cltvExpiryDelta: Int, htlcMinimumMsat: Long, feeBaseMsat: Long,
+                              feeProportionalMillionths: Long)
 
 case class ChannelBalances(localBalances: Set[ChannelBalanceInfo], tag: String = "ChannelBalances")
