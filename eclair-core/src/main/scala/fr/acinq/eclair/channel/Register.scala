@@ -63,17 +63,17 @@ class Register(nodeParams: NodeParams) extends Actor with ActorLogging {
 
     case ChannelSignatureSent(_, commitments, Some(channelUpdate)) =>
       val localBalances1 = localBalances + (commitments.channelId -> getBalances(commitments, channelUpdate))
-      context.system.eventStream publish ChannelBalances(localBalances1.values.toSet)
+      context.system.eventStream publish ChannelBalances(localBalances1.values.toList)
       context become main(channels, shortIds, channelsTo, localBalances1)
 
     case ChannelStateChanged(_, _, _, previousState, NORMAL, d: DATA_NORMAL) if previousState != NORMAL =>
       val localBalances1 = localBalances + (d.commitments.channelId -> getBalances(d.commitments, d.channelUpdate))
-      context.system.eventStream publish ChannelBalances(localBalances1.values.toSet)
+      context.system.eventStream publish ChannelBalances(localBalances1.values.toList)
       context become main(channels, shortIds, channelsTo, localBalances1)
 
     case ChannelStateChanged(_, _, _, NORMAL, currentState, hasCommitments: HasCommitments) if currentState != NORMAL =>
       val localBalances1 = localBalances - hasCommitments.channelId
-      context.system.eventStream publish ChannelBalances(localBalances1.values.toSet)
+      context.system.eventStream publish ChannelBalances(localBalances1.values.toList)
       context become main(channels, shortIds, channelsTo, localBalances1)
 
     case 'channels => sender ! channels
@@ -125,4 +125,4 @@ case class ChannelBalanceInfo(balance: ChannelBalance, peerNodeId: PublicKey, sh
                               cltvExpiryDelta: Int, htlcMinimumMsat: Long, feeBaseMsat: Long,
                               feeProportionalMillionths: Long)
 
-case class ChannelBalances(localBalances: Set[ChannelBalanceInfo], tag: String = "ChannelBalances")
+case class ChannelBalances(localBalances: List[ChannelBalanceInfo], tag: String = "ChannelBalances")
