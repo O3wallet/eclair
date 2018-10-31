@@ -39,6 +39,13 @@ class Register(nodeParams: NodeParams) extends Actor with ActorLogging {
   context.system.eventStream.subscribe(self, classOf[ChannelSignatureSent])
   context.system.eventStream.subscribe(self, classOf[ChannelStateChanged])
 
+  var pubBalancePeers: Set[PublicKey] = nodeParams.channelsDb.listPublicBalancePeers()
+
+  import scala.concurrent.ExecutionContext.Implicits.global
+  context.system.scheduler.schedule(initialDelay = 1.seconds, interval = 10.minutes) {
+    pubBalancePeers = nodeParams.channelsDb.listPublicBalancePeers()
+  }
+
   override def receive: Receive = main(Map.empty, Map.empty, Map.empty, Map.empty)
 
   def main(channels: Map[BinaryData, ActorRef], shortIds: Map[ShortChannelId, BinaryData], channelsTo: Map[BinaryData, PublicKey], localBalances: Map[BinaryData, ChannelBalanceInfo]): Receive = {
@@ -63,18 +70,18 @@ class Register(nodeParams: NodeParams) extends Actor with ActorLogging {
 
     case ChannelSignatureSent(_, commitments, Some(channelUpdate)) =>
       val localBalances1 = localBalances + (commitments.channelId -> getBalances(commitments, channelUpdate))
-      context.system.eventStream publish ChannelBalances(localBalances1.values.toSet)
+      if (pubBalancePeers contains commitments.remoteParams.nodeId) notifyWebsocket(localBalances1)
       context become main(channels, shortIds, channelsTo, localBalances1)
 
     case ChannelStateChanged(_, _, _, previousState, NORMAL, d: DATA_NORMAL) if previousState != NORMAL =>
       val localBalances1 = localBalances + (d.commitments.channelId -> getBalances(d.commitments, d.channelUpdate))
-      context.system.eventStream publish ChannelBalances(localBalances1.values.toSet)
       context become main(channels, shortIds, channelsTo, localBalances1)
+      notifyWebsocket(localBalances1)
 
     case ChannelStateChanged(_, _, _, NORMAL, currentState, hasCommitments: HasCommitments) if currentState != NORMAL =>
       val localBalances1 = localBalances - hasCommitments.channelId
-      context.system.eventStream publish ChannelBalances(localBalances1.values.toSet)
       context become main(channels, shortIds, channelsTo, localBalances1)
+      notifyWebsocket(localBalances1)
 
     case 'channels => sender ! channels
 
@@ -105,6 +112,11 @@ class Register(nodeParams: NodeParams) extends Actor with ActorLogging {
     ChannelBalanceInfo(ChannelBalance(canSendWithReserve, canReceiveWithReserve), cs.remoteParams.nodeId,
       cu.shortChannelId.toLong, cu.cltvExpiryDelta, cu.htlcMinimumMsat, cu.feeBaseMsat,
       cu.feeProportionalMillionths)
+  }
+
+  private def notifyWebsocket(localBalances: Map[BinaryData, ChannelBalanceInfo]) = {
+    val balances = localBalances.values.filter(pubBalancePeers contains _.peerNodeId)
+    context.system.eventStream publish ChannelBalances(balances.toSet)
   }
 }
 

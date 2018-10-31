@@ -17,6 +17,7 @@
 package fr.acinq.eclair.db
 
 import fr.acinq.bitcoin.BinaryData
+import fr.acinq.bitcoin.Crypto.PublicKey
 import fr.acinq.eclair.channel.HasCommitments
 
 trait ChannelsDb {
@@ -31,4 +32,10 @@ trait ChannelsDb {
 
   def listHtlcInfos(channelId: BinaryData, commitmentNumber: Long): Seq[(BinaryData, Long)]
 
+
+  def addPublicBalancePeer(peerNodeId: PublicKey): String
+
+  def removePublicBalancePeer(peerNodeId: PublicKey): String
+
+  def listPublicBalancePeers(): Set[PublicKey]
 }

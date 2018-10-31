@@ -19,6 +19,7 @@ package fr.acinq.eclair.db.sqlite
 import java.sql.Connection
 
 import fr.acinq.bitcoin.BinaryData
+import fr.acinq.bitcoin.Crypto.PublicKey
 import fr.acinq.eclair.channel.HasCommitments
 import fr.acinq.eclair.db.ChannelsDb
 import fr.acinq.eclair.wire.ChannelCodecs.stateDataCodec
@@ -37,6 +38,8 @@ class SqliteChannelsDb(sqlite: Connection) extends ChannelsDb {
     statement.execute("PRAGMA foreign_keys = ON")
     statement.executeUpdate("CREATE TABLE IF NOT EXISTS local_channels (channel_id BLOB NOT NULL PRIMARY KEY, data BLOB NOT NULL)")
     statement.executeUpdate("CREATE TABLE IF NOT EXISTS htlc_infos (channel_id BLOB NOT NULL, commitment_number BLOB NOT NULL, payment_hash BLOB NOT NULL, cltv_expiry INTEGER NOT NULL, FOREIGN KEY(channel_id) REFERENCES local_channels(channel_id))")
+    statement.executeUpdate("CREATE TABLE IF NOT EXISTS public_balance_peers (peer_node_id BLOB NOT NULL UNIQUE)")
+
     statement.executeUpdate("CREATE INDEX IF NOT EXISTS htlc_infos_idx ON htlc_infos(channel_id, commitment_number)")
   }
 
@@ -99,6 +102,35 @@ class SqliteChannelsDb(sqlite: Connection) extends ChannelsDb {
         q = q :+ (BinaryData(rs.getBytes("payment_hash")), rs.getLong("cltv_expiry"))
       }
       q
+    }
+  }
+
+  override def addPublicBalancePeer(peerNodeId: PublicKey): String = {
+    using(sqlite.prepareStatement("INSERT INTO public_balance_peers VALUES (?)")) { statement =>
+      statement.setBytes(1, peerNodeId.toBin)
+      statement.executeUpdate()
+    }
+
+    "OK"
+  }
+
+  override def removePublicBalancePeer(peerNodeId: PublicKey): String = {
+    using(sqlite.prepareStatement("DELETE FROM public_balance_peers WHERE peer_node_id=?")) { statement =>
+      statement.setBytes(1, peerNodeId.toBin)
+      statement.executeUpdate()
+    }
+
+    "OK"
+  }
+
+  override def listPublicBalancePeers(): Set[PublicKey] = {
+    using(sqlite.prepareStatement("SELECT peer_node_id FROM public_balance_peers")) { statement =>
+      val rs = statement.executeQuery
+      var s: Set[PublicKey] = Set()
+      while (rs.next()) {
+        s = s + PublicKey(rs.getBytes("peer_node_id"))
+      }
+      s
     }
   }
 }

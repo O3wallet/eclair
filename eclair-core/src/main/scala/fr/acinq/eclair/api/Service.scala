@@ -371,6 +371,22 @@ trait Service extends Logging {
                           val res = (register ? 'localBalances).mapTo[Iterable[ChannelBalance]]
                           completeRpcFuture(req.id, res)
 
+                        case "addpubpeer" => req.params match {
+                          case JString(nodeId) :: Nil => Try(PublicKey(nodeId)) match {
+                            case Success(pk) => completeRpcFuture(req.id, Future.successful(nodeParams.channelsDb.addPublicBalancePeer(pk)))
+                            case _ => reject(RpcValidationRejection(req.id, s"invalid nodeId key '$nodeId'"))
+                          }
+                          case _ => reject(UnknownParamsRejection(req.id, "[nodeId] required"))
+                        }
+
+                        case "rmpubpeer" => req.params match {
+                          case JString(nodeId) :: Nil => Try(PublicKey(nodeId)) match {
+                            case Success(pk) => completeRpcFuture(req.id, Future.successful(nodeParams.channelsDb.removePublicBalancePeer(pk)))
+                            case _ => reject(RpcValidationRejection(req.id, s"invalid nodeId key '$nodeId'"))
+                          }
+                          case _ => reject(UnknownParamsRejection(req.id, "[nodeId] required"))
+                        }
+
                         // method name was not found
                         case _ => reject(UnknownMethodRejection(req.id))
                       }
@@ -394,20 +410,16 @@ trait Service extends Logging {
     // create a flow transforming a queue of string -> string
     val (flowInput, flowOutput) = Source.queue[String](10, OverflowStrategy.dropTail).toMat(BroadcastHub.sink[String])(Keep.both).run()
 
+    var lastBalances = ChannelBalances(Set.empty)
+
     // register an actor that feeds the queue on payment related events
     system.actorOf(Props(new Actor {
-
-      override def preStart: Unit = {
-        context.system.eventStream.subscribe(self, classOf[ChannelBalances])
-        context.system.eventStream.subscribe(self, classOf[PaymentFailed])
-        context.system.eventStream.subscribe(self, classOf[PaymentEvent])
-      }
+      override def preStart: Unit = context.system.eventStream.subscribe(self, classOf[ChannelBalances])
 
       def receive: Receive = {
-        case message: ChannelBalances => flowInput.offer(Serialization write message)
-        case message: PaymentFailed => flowInput.offer(Serialization write message)
-        case message: PaymentEvent => flowInput.offer(Serialization write message)
-        case other => logger.info(s"Unexpected ws message: $other")
+        case cb: ChannelBalances if lastBalances != cb =>
+          flowInput offer Serialization.write(cb)
+          lastBalances = cb
       }
 
     }))
@@ -416,6 +428,10 @@ trait Service extends Logging {
       .mapConcat(_ => Nil) // Ignore heartbeats and other data from the client
       .merge(flowOutput) // Stream the data we want to the client
       .map(TextMessage.apply)
+      .watchTermination() { (_, _) =>
+        flowInput offer Serialization.write(lastBalances)
+        NotUsed.getInstance
+      }
   }
 
   def help = List(
