@@ -410,7 +410,7 @@ trait Service extends Logging {
     // create a flow transforming a queue of string -> string
     val (flowInput, flowOutput) = Source.queue[String](10, OverflowStrategy.dropTail).toMat(BroadcastHub.sink[String])(Keep.both).run()
 
-    var lastBalances = ChannelBalances(Set.empty)
+    var lastBalances = ChannelBalances(List.empty)
 
     // register an actor that feeds the queue on payment related events
     system.actorOf(Props(new Actor {

@@ -116,7 +116,7 @@ class Register(nodeParams: NodeParams) extends Actor with ActorLogging {
 
   private def notifyWebsocket(localBalances: Map[BinaryData, ChannelBalanceInfo]) = {
     val balances = localBalances.values.filter(pubBalancePeers contains _.peerNodeId)
-    context.system.eventStream publish ChannelBalances(balances.toSet)
+    context.system.eventStream publish ChannelBalances(balances.toList)
   }
 }
 
@@ -137,4 +137,4 @@ case class ChannelBalanceInfo(balance: ChannelBalance, peerNodeId: PublicKey, sh
                               cltvExpiryDelta: Int, htlcMinimumMsat: Long, feeBaseMsat: Long,
                               feeProportionalMillionths: Long)
 
-case class ChannelBalances(localBalances: Set[ChannelBalanceInfo], tag: String = "ChannelBalances")
+case class ChannelBalances(localBalances: List[ChannelBalanceInfo], tag: String = "ChannelBalances")
