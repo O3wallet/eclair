@@ -16,6 +16,8 @@
 
 package fr.acinq.eclair.api
 
+import java.net.InetSocketAddress
+
 import akka.NotUsed
 import akka.actor.{Actor, ActorRef, ActorSystem, Props, Scheduler}
 import akka.http.scaladsl.model.HttpMethods._
@@ -44,6 +46,9 @@ import fr.acinq.eclair.router.{ChannelDesc, RouteRequest, RouteResponse}
 import fr.acinq.eclair.wire.{ChannelAnnouncement, ChannelUpdate, NodeAnnouncement}
 import fr.acinq.eclair.{Kit, ShortChannelId, feerateByte2Kw}
 import grizzled.slf4j.Logging
+import org.java_websocket.WebSocket
+import org.java_websocket.handshake.ClientHandshake
+import org.java_websocket.server.WebSocketServer
 import org.json4s.JsonAST.{JBool, JInt, JString}
 import org.json4s.jackson.Serialization
 import org.json4s.{JValue, jackson}
@@ -84,8 +89,6 @@ trait Service extends Logging {
   def password: String
 
   def appKit: Kit
-
-  val socketHandler: Flow[Message, TextMessage.Strict, NotUsed]
 
   def userPassAuthenticator(credentials: Credentials): Future[Option[String]] = credentials match {
     case p@Credentials.Provided(id) if p.verify(password) => Future.successful(Some(id))
@@ -393,8 +396,6 @@ trait Service extends Logging {
                   }
                 }
               }
-            } ~ path("ws") {
-              handleWebSocketMessages(socketHandler)
             }
           }
         }
@@ -405,33 +406,45 @@ trait Service extends Logging {
 
   private def extractPaymentHash(identifier: String) = Try(PaymentRequest.read(identifier).paymentHash) orElse Try(BinaryData(identifier))
 
-  def makeSocketHandler(system: ActorSystem)(implicit materializer: ActorMaterializer): Flow[Message, TextMessage.Strict, NotUsed] = {
+  // WEBSOCKET
 
-    // create a flow transforming a queue of string -> string
-    val (flowInput, flowOutput) = Source.queue[String](10, OverflowStrategy.dropTail).toMat(BroadcastHub.sink[String])(Keep.both).run()
+  def wsAddress: InetSocketAddress
+
+  def makeWSHandler(system: ActorSystem)(implicit materializer: ActorMaterializer): Unit = {
 
     var lastBalances = ChannelBalances(List.empty)
+    var conns = Set.empty[WebSocket]
 
-    // register an actor that feeds the queue on payment related events
+    val ws = new WebSocketServer(wsAddress) {
+      def onOpen(conn: WebSocket, handshake: ClientHandshake): Unit = {
+        conn send Serialization.write(lastBalances)
+        conns += conn
+      }
+
+      def onMessage(conn: WebSocket, incomingUserMessage: String): Unit = {
+
+      }
+
+      def onClose(conn: WebSocket, c: Int, rs: String, rm: Boolean): Unit = {
+        conns -= conn
+      }
+
+      def onError(conn: WebSocket, reason: Exception): Unit = logger.error(s"Websocket error $reason")
+      def onStart(): Unit = logger.info(s"Websocket server started at $wsAddress")
+      Future(run())
+    }
+
     system.actorOf(Props(new Actor {
       override def preStart: Unit = context.system.eventStream.subscribe(self, classOf[ChannelBalances])
 
       def receive: Receive = {
         case cb: ChannelBalances if lastBalances != cb =>
-          flowInput offer Serialization.write(cb)
+          val serialized = Serialization.write(cb)
+          for (conn <- conns) conn send serialized
           lastBalances = cb
       }
 
     }))
-
-    Flow[Message]
-      .mapConcat(_ => Nil) // Ignore heartbeats and other data from the client
-      .merge(flowOutput) // Stream the data we want to the client
-      .map(TextMessage.apply)
-      .watchTermination() { (_, _) =>
-        flowInput offer Serialization.write(lastBalances)
-        NotUsed.getInstance
-      }
   }
 
   def help = List(

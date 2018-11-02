@@ -35,12 +35,15 @@ import fr.acinq.eclair.blockchain.bitcoind.{BitcoinCoreWallet, ZmqWatcher}
 import fr.acinq.eclair.blockchain.electrum._
 import fr.acinq.eclair.blockchain.fee.{ConstantFeeProvider, _}
 import fr.acinq.eclair.blockchain.{EclairWallet, _}
-import fr.acinq.eclair.channel.Register
+import fr.acinq.eclair.channel.{ChannelBalances, Register}
 import fr.acinq.eclair.crypto.LocalKeyManager
 import fr.acinq.eclair.io.{Authenticator, Server, Switchboard}
 import fr.acinq.eclair.payment._
 import fr.acinq.eclair.router._
 import grizzled.slf4j.Logging
+import org.java_websocket.WebSocket
+import org.java_websocket.handshake.ClientHandshake
+import org.java_websocket.server.WebSocketServer
 import org.json4s.JsonAST.JArray
 
 import scala.concurrent.duration._
@@ -254,8 +257,11 @@ class Setup(datadir: File,
 
           override def appKit: Kit = kit
 
-          override val socketHandler = makeSocketHandler(system)(materializer)
+          override def wsAddress = new InetSocketAddress(config.getString("api.binding-ip"), config.getInt("api.wsport"))
+
+          makeWSHandler(system)(materializer)
         }
+
         val httpBound = Http().bindAndHandle(api.route, config.getString("api.binding-ip"), config.getInt("api.port")).recover {
           case _: BindFailedException => throw TCPBindException(config.getInt("api.port"))
         }
